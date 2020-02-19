@@ -234,30 +234,19 @@ impl State
         {
             if depth >= 2 && self.stack[depth-2] >= self.stack[depth-1]
             {
-                self.add();
-                if self.try_build_all_from(todo)
-                {
-                    return true;
-                }
-                self.undo();
+                let ops = match self.expr.last().unwrap()
+                    {
+                        Op::Push(_) => "+-*/\\",
+                        Op::Add     => "*/\\",
+                        Op::Sub     => "*/\\",
+                        Op::Mul     => "+-",
+                        Op::Div     => "+-",
+                        Op::RDiv    => "+-"
+                    };
 
-                self.sub();
-                if self.try_build_all_from(todo)
+                if ops.contains('+')
                 {
-                    return true;
-                }
-                self.undo();
-
-                self.mul();
-                if self.try_build_all_from(todo)
-                {
-                    return true;
-                }
-                self.undo();
-
-                if !self.stack[depth-1].is_zero()
-                {
-                    self.div();
+                    self.add();
                     if self.try_build_all_from(todo)
                     {
                         return true;
@@ -265,14 +254,50 @@ impl State
                     self.undo();
                 }
 
-                if !self.stack[depth-2].is_zero()
+                if ops.contains('-')
                 {
-                    self.rdiv();
+                    self.sub();
                     if self.try_build_all_from(todo)
                     {
                         return true;
                     }
                     self.undo();
+                }
+
+                if ops.contains('*')
+                {
+                    self.mul();
+                    if self.try_build_all_from(todo)
+                    {
+                        return true;
+                    }
+                    self.undo();
+                }
+
+                if ops.contains('/')
+                {
+                    if !self.stack[depth-1].is_zero()
+                    {
+                        self.div();
+                        if self.try_build_all_from(todo)
+                        {
+                            return true;
+                        }
+                        self.undo();
+                    }
+                }
+
+                if ops.contains('\\')
+                {
+                    if !self.stack[depth-2].is_zero()
+                    {
+                        self.rdiv();
+                        if self.try_build_all_from(todo)
+                        {
+                            return true;
+                        }
+                        self.undo();
+                    }
                 }
             }
 
