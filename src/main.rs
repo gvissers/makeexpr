@@ -1,164 +1,114 @@
 use num_traits::Zero;
+use std::collections::HashMap;
+use arrayvec::ArrayVec;
 
 type Rat = num_rational::Ratio<u64>;
 
-#[derive(Debug)]
-enum Op
+const ADD: u64 = ::std::u64::MAX;
+const SUB: u64 = ::std::u64::MAX - 1;
+const MUL: u64 = ::std::u64::MAX - 2;
+const DIV: u64 = ::std::u64::MAX - 3;
+
+type Op = u64;
+
+#[derive(Clone)]
+struct Expr
 {
-    Push(usize),
-    Add,
-    Sub,
-    Mul,
-    Div,
-    RDiv
+    ops: Vec<Op>,
+    val: Rat
 }
 
-struct State
+impl Expr
 {
-    nrs: Vec<u64>,
-    target: u64,
-    in_use: Vec<bool>,
-    expr: Vec<Op>,
-    stack: Vec<Rat>,
-    rstack: Vec<Rat>,
-    best: String,
-    best_diff: Option<Rat>
-}
-
-impl State
-{
-    fn new(mut nrs: Vec<u64>, target: u64) -> Self
+    fn new(val: u64) -> Self
     {
-        nrs.sort();
-        nrs.reverse();
+        Expr { ops: vec![val], val: Rat::from_integer(val) }
+    }
 
-        let count = nrs.len();
-        State
+    fn possible_combinations(&self, expr: &Self) -> ArrayVec<[(char, Rat); 6]>
+    {
+        let mut res = ArrayVec::<[_; 6]>::new();
+
+        let last_op = *expr.ops.last().unwrap();
+        if last_op != ADD && last_op != SUB
         {
-            nrs: nrs,
-            target: target,
-            in_use: vec![false; count],
-            expr: vec![],
-            stack: vec![],
-            rstack: vec![],
-            best: String::new(),
-            best_diff: None
-        }
-    }
-
-    fn push(&mut self, idx: usize)
-    {
-        self.expr.push(Op::Push(idx));
-        self.in_use[idx] = true;
-        self.stack.push(Rat::from_integer(self.nrs[idx]));
-//         println!("Push:");
-//         println!("expr = {:?}", self.expr);
-//         println!("stack = {:?}", self.stack);
-    }
-
-    fn add(&mut self)
-    {
-        self.expr.push(Op::Add);
-        let n0 = self.stack.pop().unwrap();
-        let n1 = self.stack.pop().unwrap();
-        self.stack.push(n1 + n0);
-        self.rstack.push(n1);
-        self.rstack.push(n0);
-//         println!("Add:");
-//         println!("expr = {:?}", self.expr);
-//         println!("stack = {:?}", self.stack);
-    }
-
-    fn sub(&mut self)
-    {
-        self.expr.push(Op::Sub);
-        let n0 = self.stack.pop().unwrap();
-        let n1 = self.stack.pop().unwrap();
-        self.stack.push(n1 - n0);
-        self.rstack.push(n1);
-        self.rstack.push(n0);
-//         println!("Sub:");
-//         println!("expr = {:?}", self.expr);
-//         println!("stack = {:?}", self.stack);
-    }
-
-    fn mul(&mut self)
-    {
-        self.expr.push(Op::Mul);
-        let n0 = self.stack.pop().unwrap();
-        let n1 = self.stack.pop().unwrap();
-        self.stack.push(n1 * n0);
-        self.rstack.push(n1);
-        self.rstack.push(n0);
-//         println!("Mul:");
-//         println!("expr = {:?}", self.expr);
-//         println!("stack = {:?}", self.stack);
-    }
-
-    fn div(&mut self)
-    {
-        self.expr.push(Op::Div);
-        let n0 = self.stack.pop().unwrap();
-        let n1 = self.stack.pop().unwrap();
-        self.stack.push(n1 / n0);
-        self.rstack.push(n1);
-        self.rstack.push(n0);
-//         println!("Div:");
-//         println!("expr = {:?}", self.expr);
-//         println!("stack = {:?}", self.stack);
-    }
-
-    fn rdiv(&mut self)
-    {
-        self.expr.push(Op::RDiv);
-        let n0 = self.stack.pop().unwrap();
-        let n1 = self.stack.pop().unwrap();
-        self.stack.push(n0 / n1);
-        self.rstack.push(n1);
-        self.rstack.push(n0);
-//         println!("RDiv:");
-//         println!("expr = {:?}", self.expr);
-//         println!("stack = {:?}", self.stack);
-    }
-
-    fn undo(&mut self)
-    {
-        let op = self.expr.pop().unwrap();
-        match op
-        {
-            Op::Push(idx) => {
-                self.stack.pop();
-                self.in_use[idx] = false;
-            },
-            _ => {
-                self.stack.pop();
-                let n0 = self.rstack.pop().unwrap();
-                let n1 = self.rstack.pop().unwrap();
-                self.stack.push(n1);
-                self.stack.push(n0);
+            res.push(('+', self.val + expr.val));
+            if self.val >= expr.val
+            {
+                res.push(('-', self.val - expr.val));
             }
         }
-//         println!("Undo:");
-//         println!("expr = {:?}", self.expr);
-//         println!("stack = {:?}", self.stack);
+
+        if last_op != MUL && last_op != DIV
+        {
+            res.push(('*', self.val * expr.val));
+            if !expr.val.is_zero()
+            {
+                res.push(('/', self.val / expr.val));
+            }
+        }
+
+        let last_op = *self.ops.last().unwrap();
+        if last_op != ADD && last_op != SUB && expr.val >= self.val
+        {
+            res.push(('_', expr.val - self.val));
+        }
+        if last_op != MUL && last_op != DIV && !self.val.is_zero()
+        {
+            res.push(('\\', expr.val / self.val));
+        }
+
+        res
+    }
+
+    fn combine(&self, expr: &Self, op: char, val: Rat) -> Self
+    {
+        let mut ops;
+        match op
+        {
+            '+' => {
+                ops = [&self.ops[..], &expr.ops[..]].concat();
+                ops.push(ADD);
+            },
+            '-' => {
+                ops = [&self.ops[..], &expr.ops[..]].concat();
+                ops.push(SUB);
+            },
+            '*' => {
+                ops = [&self.ops[..], &expr.ops[..]].concat();
+                ops.push(MUL);
+            },
+            '/' => {
+                ops = [&self.ops[..], &expr.ops[..]].concat();
+                ops.push(DIV);
+            },
+            '_' => {
+                ops = [&expr.ops[..], &self.ops[..]].concat();
+                ops.push(SUB);
+            },
+            '\\' => {
+                ops = [&expr.ops[..], &self.ops[..]].concat();
+                ops.push(DIV);
+            }
+            _ => { panic!(); }
+        }
+
+        Expr { ops: ops, val: val }
     }
 
     fn to_string(&self) -> String
     {
         let mut ss = vec![];
-        for op in self.expr.iter()
+        for op in self.ops.iter()
         {
-            match op
+            match *op
             {
-                Op::Push(idx) => {
-                    ss.push((self.nrs[*idx].to_string(), 'n'));
-                },
-                Op::Add => {
+                ADD => {
                     let (s0, _) = ss.pop().unwrap();
                     let (s1, _) = ss.pop().unwrap();
                     ss.push((format!("{}+{}", s1, s0), '+'));
                 },
-                Op::Sub => {
+                SUB => {
                     let (mut s0, o0) = ss.pop().unwrap();
                     let (s1, _) = ss.pop().unwrap();
                     if "+-".contains(o0)
@@ -167,191 +117,169 @@ impl State
                     }
                     ss.push((format!("{}-{}", s1, s0), '-'));
                 },
-                Op::Mul => {
+                MUL => {
                     let (mut s0, o0) = ss.pop().unwrap();
                     let (mut s1, o1) = ss.pop().unwrap();
                     if "+-".contains(o0)
                     {
                         s0 = format!("({})", s0);
                     }
-                    if "+-*/\\".contains(o1)
+                    if "+-/".contains(o1)
                     {
                         s1 = format!("({})", s1);
                     }
-                    ss.push((format!("{}*{}", s1, s0), 'm'));
+                    ss.push((format!("{}*{}", s1, s0), '*'));
                 },
-                Op::Div => {
+                DIV => {
                     let (mut s0, o0) = ss.pop().unwrap();
                     let (mut s1, o1) = ss.pop().unwrap();
-                    if "+-*/\\".contains(o0)
+                    if "+-*/".contains(o0)
                     {
                         s0 = format!("({})", s0);
                     }
-                    if "+-*/\\".contains(o1)
+                    if "+-/".contains(o1)
                     {
                         s1 = format!("({})", s1);
                     }
                     ss.push((format!("{}/{}", s1, s0), '/'));
                 }
-                Op::RDiv => {
-                    let (mut s0, o0) = ss.pop().unwrap();
-                    let (mut s1, o1) = ss.pop().unwrap();
-                    if "+-*/\\".contains(o0)
-                    {
-                        s0 = format!("({})", s0);
-                    }
-                    if "+-*/\\".contains(o1)
-                    {
-                        s1 = format!("({})", s1);
-                    }
-                    ss.push((format!("{}\\{}", s1, s0), '\\'));
-                }
+                val => {
+                    ss.push((val.to_string(), 'n'));
+                },
             }
         }
 
         let (res, _) = ss.pop().unwrap();
         res
     }
+}
 
-    fn try_build_all_from(&mut self, todo: usize) -> bool
+fn partitions(nrs: &[u64]) -> Vec<(Vec<u64>, Vec<u64>)>
+{
+    let mut last = nrs[0];
+    let mut res = vec![(vec![last], vec![])];
+    for &n in nrs[1..].iter()
     {
-        let depth = self.stack.len();
-
-        if todo == 0 && depth == 1
+        let count = res.len();
+        res.append(&mut res.clone());
+        for (a, _) in res[..count].iter_mut()
         {
-            let diff = if self.stack[0] > Rat::from_integer(self.target)
-                { self.stack[0] - self.target }
-                else { Rat::from_integer(self.target) - self.stack[0] };
-            if self.best_diff.is_none() || diff < self.best_diff.unwrap()
+            a.push(n);
+        }
+        for (a, b) in res[count..].iter_mut()
+        {
+            b.push(n);
+            if b.len() > a.len() || (b.len() == a.len() && b < a)
             {
-                self.best = self.to_string();
-                self.best_diff = Some(diff);
-                println!("{} = {}", self.best, self.stack[0]);
+                ::std::mem::swap(a, b);
             }
-            diff.is_zero()
+        }
+
+        if n == last
+        {
+            res.sort();
+            res.dedup();
+        }
+
+        last = n;
+    }
+
+    res.sort_by_key(|(_,b)| b.len());
+    if res[0].1.is_empty()
+    {
+        res.remove(0);
+    }
+
+    res
+}
+
+fn expressions<'a>(nrs: &[u64], cache: &'a mut HashMap<String, Vec<Expr>>) -> String
+{
+    let key = nrs.iter().map(|i| i.to_string()).collect::<Vec<_>>().join("_");
+    if !cache.contains_key(&key)
+    {
+        let mut map = vec![];
+
+        if nrs.len() == 1
+        {
+            map.push(Expr::new(nrs[0]));
         }
         else
         {
-            if depth >= 2 && self.stack[depth-2] >= self.stack[depth-1]
+            let mut seen = ::std::collections::HashSet::new();
+            for (nrs0, nrs1) in partitions(nrs)
             {
-                let ops = match self.expr.last().unwrap()
-                    {
-                        Op::Push(_) => "+-*/\\",
-                        Op::Add     => "*/\\",
-                        Op::Sub     => "*/\\",
-                        Op::Mul     => "+-",
-                        Op::Div     => "+-",
-                        Op::RDiv    => "+-"
-                    };
-
-                if ops.contains('+')
+                let key0 = expressions(&nrs0, cache);
+                let key1 = expressions(&nrs1, cache);
+                for expr0 in cache[&key0].iter()
                 {
-                    self.add();
-                    if self.try_build_all_from(todo)
+                    for expr1 in cache[&key1].iter()
                     {
-                        return true;
-                    }
-                    self.undo();
-                }
-
-                if ops.contains('-')
-                {
-                    self.sub();
-                    if self.try_build_all_from(todo)
-                    {
-                        return true;
-                    }
-                    self.undo();
-                }
-
-                if ops.contains('*')
-                {
-                    self.mul();
-                    if self.try_build_all_from(todo)
-                    {
-                        return true;
-                    }
-                    self.undo();
-                }
-
-                if ops.contains('/')
-                {
-                    if !self.stack[depth-1].is_zero()
-                    {
-                        self.div();
-                        if self.try_build_all_from(todo)
+                        for (op, val) in expr0.possible_combinations(expr1)
                         {
-                            return true;
+                            if seen.insert(val)
+                            {
+                                map.push(expr0.combine(expr1, op, val));
+                            }
                         }
-                        self.undo();
                     }
                 }
-
-                if ops.contains('\\')
-                {
-                    if !self.stack[depth-2].is_zero()
-                    {
-                        self.rdiv();
-                        if self.try_build_all_from(todo)
-                        {
-                            return true;
-                        }
-                        self.undo();
-                    }
-                }
-            }
-
-            if todo > 0
-            {
-                let count = self.nrs.len();
-                let mut last = self.nrs[0] + 1;
-                for idx in 0..count
-                {
-                    if !self.in_use[idx] && self.nrs[idx] < last
-                    {
-                        self.push(idx);
-                        if self.try_build_all_from(todo-1)
-                        {
-                            return true;
-                        }
-                        self.undo();
-                        last = self.nrs[idx];
-                    }
-                }
-            }
-
-            false
-        }
-    }
-
-    fn try_build_all(&mut self) -> &str
-    {
-        self.best = String::new();
-
-        let count = self.nrs.len();
-        let mut last = self.nrs[0] + 1;
-        for idx in 0..count
-        {
-            if self.nrs[idx] < last
-            {
-                self.push(idx);
-                if self.try_build_all_from(count - 1)
-                {
-                    break;
-                }
-                self.undo();
-                last = self.nrs[idx];
             }
         }
 
-        &self.best
+        cache.insert(key.clone(), map);
     }
+
+    key
 }
 
-fn build_expression(nrs: Vec<u64>, target: u64)
+fn build_expression(nrs: &[u64], target: u64)
 {
-    let mut state = State::new(nrs, target);
-    state.try_build_all();
+    if nrs.len() == 1
+    {
+        println!("{} = {}", nrs[0], nrs[0]);
+    }
+    else
+    {
+        let mut cache = HashMap::new();
+
+        let rtarget = Rat::from_integer(target);
+        let mut best = String::new();
+        let mut best_diff = Rat::zero();
+
+        'outer: for (nrs0, nrs1) in partitions(nrs)
+        {
+            let key0 = expressions(&nrs0, &mut cache);
+            let key1 = expressions(&nrs1, &mut cache);
+            for expr0 in cache[&key0].iter()
+            {
+                for expr1 in cache[&key1].iter()
+                {
+                    for (op, val) in expr0.possible_combinations(expr1)
+                    {
+                        let diff = if val > rtarget { val - rtarget } else { rtarget - val };
+                        if best.is_empty() || diff < best_diff
+                        {
+                            best = expr0.combine(expr1, op, val).to_string();
+                            best_diff = diff;
+                            println!("{} = {}", best, val);
+
+                            if diff.is_zero()
+                            {
+                                break 'outer;
+                            }
+                        }
+                    }
+                }
+            }
+
+            cache.remove(&key0);
+            if nrs1.len() >= nrs0.len()
+            {
+                cache.remove(&key1);
+            }
+        }
+    }
 }
 
 fn usage() -> !
@@ -385,5 +313,6 @@ fn main()
         _ => usage()
     }
 
-    build_expression(nrs, target);
+    nrs.sort();
+    build_expression(&nrs, target);
 }
