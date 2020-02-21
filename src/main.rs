@@ -1,6 +1,7 @@
-use num_traits::Zero;
+use num_traits::{Zero, One};
 use std::collections::HashMap;
 use arrayvec::ArrayVec;
+use fasthash::xx::Hash64;
 
 type Rat = num_rational::Ratio<u64>;
 
@@ -29,31 +30,37 @@ impl Expr
     {
         let mut res = ArrayVec::<[_; 6]>::new();
 
-        let last_op = *expr.ops.last().unwrap();
-        if last_op != ADD && last_op != SUB
+        let op0 = *self.ops.last().unwrap();
+        let op1 = *expr.ops.last().unwrap();
+        if op1 != ADD && op1 != SUB
         {
-            res.push(('+', self.val + expr.val));
-            if self.val >= expr.val
+            if op0 != SUB
+            {
+                res.push(('+', self.val + expr.val));
+            }
+            if self.val >= expr.val && !expr.val.is_zero()
             {
                 res.push(('-', self.val - expr.val));
             }
         }
 
-        if last_op != MUL && last_op != DIV
+        if op1 != MUL && op1 != DIV
         {
-            res.push(('*', self.val * expr.val));
-            if !expr.val.is_zero()
+            if op0 != DIV
+            {
+                res.push(('*', self.val * expr.val));
+            }
+            if !expr.val.is_zero() && !expr.val.is_one()
             {
                 res.push(('/', self.val / expr.val));
             }
         }
 
-        let last_op = *self.ops.last().unwrap();
-        if last_op != ADD && last_op != SUB && expr.val >= self.val
+        if op0 != ADD && op0 != SUB && expr.val >= self.val && !self.val.is_zero()
         {
             res.push(('_', expr.val - self.val));
         }
-        if last_op != MUL && last_op != DIV && !self.val.is_zero()
+        if op0 != MUL && op0 != DIV && !self.val.is_zero() && !self.val.is_one()
         {
             res.push(('\\', expr.val / self.val));
         }
@@ -206,7 +213,7 @@ fn expressions<'a>(nrs: &[u64], cache: &'a mut HashMap<String, Vec<Expr>>) -> St
         }
         else
         {
-            let mut seen = ::std::collections::HashSet::new();
+            let mut seen = ::std::collections::HashSet::with_hasher(Hash64);
             for (nrs0, nrs1) in partitions(nrs)
             {
                 let key0 = expressions(&nrs0, cache);
@@ -227,6 +234,7 @@ fn expressions<'a>(nrs: &[u64], cache: &'a mut HashMap<String, Vec<Expr>>) -> St
             }
         }
 
+// println!("insert {} {}", key, map.len());
         cache.insert(key.clone(), map);
     }
 
