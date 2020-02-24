@@ -4,13 +4,27 @@ use arrayvec::ArrayVec;
 use fasthash::xx::Hash64;
 
 type Rat = num_rational::Ratio<u64>;
+/// Type for an index.
+///
+/// Values of this type are used as an index in the array of input numbers.
+/// The highest four possible index values are reserved for encoding the
+/// operations.In the (highly unlikely) case that you wish to use this program
+/// with more than 252 input numbers, change this type to `u16` or wider.
+/// Typically, though, memory or time constraints limit the use of this program
+/// to approximately 10 distinct input numbers.
+type Idx = u8;
+/// The type for a single operation.
+///
+/// Values of this type are used either as an index in the array of input
+/// numbers, or are one of the special values `ADD`..`DIV` that indicate
+/// an operation on the previous two values in the stack.
+type Op = Idx;
 
-const ADD: u8 = ::std::u8::MAX;
-const SUB: u8 = ::std::u8::MAX - 1;
-const MUL: u8 = ::std::u8::MAX - 2;
-const DIV: u8 = ::std::u8::MAX - 3;
+const ADD: Op = Op::max_value();
+const SUB: Op = Op::max_value() - 1;
+const MUL: Op = Op::max_value() - 2;
+const DIV: Op = Op::max_value() - 3;
 
-type Op = u8;
 
 #[derive(Clone)]
 struct Expr
@@ -21,7 +35,7 @@ struct Expr
 
 impl Expr
 {
-    fn new(nrs: &[u64], idx: u8) -> Self
+    fn new(nrs: &[u64], idx: Idx) -> Self
     {
         Expr { ops: vec![idx], val: Rat::from_integer(nrs[idx as usize]) }
     }
@@ -161,13 +175,8 @@ impl Expr
     }
 }
 
-fn partitions(nrs: &[u64], idxs: &[u8]) -> Vec<(Vec<u8>, Vec<u8>)>
+fn partitions(nrs: &[u64], idxs: &[Idx]) -> Vec<(Vec<Idx>, Vec<Idx>)>
 {
-    let count = nrs.len();
-    if count > ::std::u8::MAX as usize - 4
-    {
-        panic!("Too many numbers for u8 indices");
-    }
 
     let mut res = vec![(vec![nrs[0]], vec![], vec![idxs[0]], vec![])];
     for &idx in idxs[1..].iter()
@@ -203,7 +212,8 @@ fn partitions(nrs: &[u64], idxs: &[u8]) -> Vec<(Vec<u8>, Vec<u8>)>
     res.into_iter().map(|(_, _, i, j)| (i, j)).collect()
 }
 
-fn expressions<'a>(nrs: &[u64], idxs: &[u8], cache: &'a mut HashMap<String, Vec<Expr>>) -> String
+fn expressions<'a>(nrs: &[u64], idxs: &[Idx],
+    cache: &'a mut HashMap<String, Vec<Expr>>) -> String
 {
     let key = idxs.iter().map(|&i| nrs[i as usize].to_string()).collect::<Vec<_>>().join("_");
     if !cache.contains_key(&key)
@@ -259,7 +269,7 @@ fn build_expression(nrs: &[u64], target: u64)
         let mut best = String::new();
         let mut best_diff = Rat::zero();
 
-        let idxs = (0..count as u8).collect::<Vec<_>>();
+        let idxs = (0..count as Idx).collect::<Vec<_>>();
         'outer: for (idxs0, idxs1) in partitions(nrs, &idxs)
         {
 
@@ -318,6 +328,12 @@ fn main()
             Ok(nr) => nrs.push(nr),
             _ => usage()
         }
+    }
+
+    let count = nrs.len();
+    if count > Op::max_value() as usize - 4
+    {
+        panic!("Too many numbers for {}-bit indices", 8*::std::mem::sizeof::<Idx>());
     }
 
     let target;
