@@ -5,12 +5,12 @@ use fasthash::xx::Hash64;
 
 type Rat = num_rational::Ratio<u64>;
 
-const ADD: u64 = ::std::u64::MAX;
-const SUB: u64 = ::std::u64::MAX - 1;
-const MUL: u64 = ::std::u64::MAX - 2;
-const DIV: u64 = ::std::u64::MAX - 3;
+const ADD: u8 = ::std::u8::MAX;
+const SUB: u8 = ::std::u8::MAX - 1;
+const MUL: u8 = ::std::u8::MAX - 2;
+const DIV: u8 = ::std::u8::MAX - 3;
 
-type Op = u64;
+type Op = u8;
 
 #[derive(Clone)]
 struct Expr
@@ -21,9 +21,9 @@ struct Expr
 
 impl Expr
 {
-    fn new(val: u64) -> Self
+    fn new(nrs: &[u64], idx: u8) -> Self
     {
-        Expr { ops: vec![val], val: Rat::from_integer(val) }
+        Expr { ops: vec![idx], val: Rat::from_integer(nrs[idx as usize]) }
     }
 
     fn possible_combinations(&self, expr: &Self) -> ArrayVec<[(char, Rat); 6]>
@@ -103,7 +103,7 @@ impl Expr
         Expr { ops: ops, val: val }
     }
 
-    fn to_string(&self) -> String
+    fn to_string(&self, nrs: &[u64]) -> String
     {
         let mut ss = vec![];
         for op in self.ops.iter()
@@ -150,8 +150,8 @@ impl Expr
                     }
                     ss.push((format!("{}/{}", s1, s0), '/'));
                 }
-                val => {
-                    ss.push((val.to_string(), 'n'));
+                idx => {
+                    ss.push((nrs[idx as usize].to_string(), 'n'));
                 },
             }
         }
@@ -161,63 +161,66 @@ impl Expr
     }
 }
 
-fn partitions(nrs: &[u64]) -> Vec<(Vec<u64>, Vec<u64>)>
+fn partitions(nrs: &[u64], idxs: &[u8]) -> Vec<(Vec<u8>, Vec<u8>)>
 {
-    let mut last = nrs[0];
-    let mut res = vec![(vec![last], vec![])];
-    for &n in nrs[1..].iter()
+    let count = nrs.len();
+    if count > ::std::u8::MAX as usize - 4
+    {
+        panic!("Too many numbers for u8 indices");
+    }
+
+    let mut res = vec![(vec![nrs[0]], vec![], vec![idxs[0]], vec![])];
+    for &idx in idxs[1..].iter()
     {
         let count = res.len();
         res.append(&mut res.clone());
-        for (a, _) in res[..count].iter_mut()
+        for (a, _, i, _) in res[..count].iter_mut()
         {
-            a.push(n);
+            a.push(nrs[idx as usize]);
+            i.push(idx);
         }
-        for (a, b) in res[count..].iter_mut()
+        for (a, b, i, j) in res[count..].iter_mut()
         {
-            b.push(n);
+            b.push(nrs[idx as usize]);
+            j.push(idx);
             if b.len() > a.len() || (b.len() == a.len() && b < a)
             {
                 ::std::mem::swap(a, b);
+                ::std::mem::swap(i, j);
             }
         }
-
-        if n == last
-        {
-            res.sort();
-            res.dedup();
-        }
-
-        last = n;
     }
 
-    res.sort_by_key(|(_,b)| b.len());
+    res.sort_by_key(|(a, b, _, _)| (a.clone(), b.clone()));
+    res.dedup_by_key(|(a, b, _, _)| (a.clone(), b.clone()));
+
+    res.sort_by_key(|(_, b, _, _)| b.len());
     if res[0].1.is_empty()
     {
         res.remove(0);
     }
 
-    res
+    res.into_iter().map(|(_, _, i, j)| (i, j)).collect()
 }
 
-fn expressions<'a>(nrs: &[u64], cache: &'a mut HashMap<String, Vec<Expr>>) -> String
+fn expressions<'a>(nrs: &[u64], idxs: &[u8], cache: &'a mut HashMap<String, Vec<Expr>>) -> String
 {
-    let key = nrs.iter().map(|i| i.to_string()).collect::<Vec<_>>().join("_");
+    let key = idxs.iter().map(|&i| nrs[i as usize].to_string()).collect::<Vec<_>>().join("_");
     if !cache.contains_key(&key)
     {
         let mut map = vec![];
 
-        if nrs.len() == 1
+        if idxs.len() == 1
         {
-            map.push(Expr::new(nrs[0]));
+            map.push(Expr::new(nrs, idxs[0]));
         }
         else
         {
             let mut seen = ::std::collections::HashSet::with_hasher(Hash64);
-            for (nrs0, nrs1) in partitions(nrs)
+            for (idxs0, idxs1) in partitions(nrs, idxs)
             {
-                let key0 = expressions(&nrs0, cache);
-                let key1 = expressions(&nrs1, cache);
+                let key0 = expressions(nrs, &idxs0, cache);
+                let key1 = expressions(nrs, &idxs1, cache);
                 for expr0 in cache[&key0].iter()
                 {
                     for expr1 in cache[&key1].iter()
@@ -243,7 +246,8 @@ fn expressions<'a>(nrs: &[u64], cache: &'a mut HashMap<String, Vec<Expr>>) -> St
 
 fn build_expression(nrs: &[u64], target: u64)
 {
-    if nrs.len() == 1
+    let count = nrs.len();
+    if count == 1
     {
         println!("{} = {}", nrs[0], nrs[0]);
     }
@@ -255,10 +259,12 @@ fn build_expression(nrs: &[u64], target: u64)
         let mut best = String::new();
         let mut best_diff = Rat::zero();
 
-        'outer: for (nrs0, nrs1) in partitions(nrs)
+        let idxs = (0..count as u8).collect::<Vec<_>>();
+        'outer: for (idxs0, idxs1) in partitions(nrs, &idxs)
         {
-            let key0 = expressions(&nrs0, &mut cache);
-            let key1 = expressions(&nrs1, &mut cache);
+
+            let key0 = expressions(nrs, &idxs0, &mut cache);
+            let key1 = expressions(nrs, &idxs1, &mut cache);
             for expr0 in cache[&key0].iter()
             {
                 for expr1 in cache[&key1].iter()
@@ -268,7 +274,7 @@ fn build_expression(nrs: &[u64], target: u64)
                         let diff = if val > rtarget { val - rtarget } else { rtarget - val };
                         if best.is_empty() || diff < best_diff
                         {
-                            best = expr0.combine(expr1, op, val).to_string();
+                            best = expr0.combine(expr1, op, val).to_string(nrs);
                             best_diff = diff;
                             println!("{} = {}", best, val);
 
@@ -282,7 +288,7 @@ fn build_expression(nrs: &[u64], target: u64)
             }
 
             cache.remove(&key0);
-            if nrs1.len() >= nrs0.len()
+            if idxs1.len() >= idxs0.len()
             {
                 cache.remove(&key1);
             }
