@@ -26,15 +26,34 @@ const MUL: Op = Op::max_value() - 2;
 const DIV: Op = Op::max_value() - 3;
 
 
+/// Structure describing an expression
+///
+/// Struct `Expr` stores an expression and the value it evaluates to. The
+/// expression is stored in reverse polish notation, and uses indices into
+/// a numbers array instead of the actual numbers themselves. The operators
+/// in the expression are encoded as the 4 greatest numbers that can be encoded
+/// in the index type. Thus, an expression like
+/// ```
+/// [0, 3, ADD, 2, MUL]
+/// ```
+/// will for a numbers array `nrs` evaluate to
+/// ```
+/// (nrs[0] + nrs[3]) * nrs[2]
+/// ```
 #[derive(Clone)]
 struct Expr
 {
+    /// The expression itself
     ops: Vec<Op>,
+    /// The resulting value of the expression
     val: Rat
 }
 
 impl Expr
 {
+    /// Create a new expression.
+    ///
+    /// Create a new expression for the single number `nrs[idx]`.
     fn new(nrs: &[u64], idx: Idx) -> Self
     {
         Expr { ops: vec![idx], val: Rat::from_integer(nrs[idx as usize]) }
@@ -175,41 +194,37 @@ impl Expr
     }
 }
 
-fn partitions(nrs: &[u64], idxs: &[Idx]) -> Vec<(Vec<Idx>, Vec<Idx>)>
+fn partitions(idxs: &[Idx]) -> Vec<(Vec<Idx>, Vec<Idx>)>
 {
-
-    let mut res = vec![(vec![nrs[0]], vec![], vec![idxs[0]], vec![])];
+    let mut res = vec![(vec![idxs[0]], vec![])];
     for &idx in idxs[1..].iter()
     {
         let count = res.len();
         res.append(&mut res.clone());
-        for (a, _, i, _) in res[..count].iter_mut()
+        for (a, _) in res[..count].iter_mut()
         {
-            a.push(nrs[idx as usize]);
-            i.push(idx);
+            a.push(idx);
         }
-        for (a, b, i, j) in res[count..].iter_mut()
+        for (a, b) in res[count..].iter_mut()
         {
-            b.push(nrs[idx as usize]);
-            j.push(idx);
+            b.push(idx);
             if b.len() > a.len() || (b.len() == a.len() && b < a)
             {
                 ::std::mem::swap(a, b);
-                ::std::mem::swap(i, j);
             }
         }
     }
 
-    res.sort_by_key(|(a, b, _, _)| (a.clone(), b.clone()));
-    res.dedup_by_key(|(a, b, _, _)| (a.clone(), b.clone()));
+    res.sort();
+    res.dedup();
 
-    res.sort_by_key(|(_, b, _, _)| b.len());
+    res.sort_by_key(|(_, b)| b.len());
     if res[0].1.is_empty()
     {
         res.remove(0);
     }
 
-    res.into_iter().map(|(_, _, i, j)| (i, j)).collect()
+    res
 }
 
 fn expressions<'a>(nrs: &[u64], idxs: &[Idx],
@@ -227,7 +242,7 @@ fn expressions<'a>(nrs: &[u64], idxs: &[Idx],
         else
         {
             let mut seen = ::std::collections::HashSet::with_hasher(Hash64);
-            for (idxs0, idxs1) in partitions(nrs, idxs)
+            for (idxs0, idxs1) in partitions(idxs)
             {
                 let key0 = expressions(nrs, &idxs0, cache);
                 let key1 = expressions(nrs, &idxs1, cache);
@@ -254,6 +269,31 @@ fn expressions<'a>(nrs: &[u64], idxs: &[Idx],
     key
 }
 
+/// Find the indexes of the unique numbers in an array.
+///
+/// For all elements in array `nrs`, find the index of the first occurrence of
+/// that element in `nrs`, and store it in the result. Afterwards, the indices
+/// array is sorted. Thus, equal numbers in the input array result in indices
+/// occuring with the same frequency in the output array, though not necessarily
+/// in the same order.
+fn unique_indices(nrs: &[u64]) -> Vec<Idx>
+{
+    let count = nrs.len();
+    let mut res = vec![];
+    for idx in 0..count
+    {
+        let uniq_idx = match nrs.iter().position(|&x| x == nrs[idx])
+            {
+                Some(dup_idx) => dup_idx,
+                None          => idx
+            };
+        res.push(uniq_idx as Idx);
+    }
+
+    res.sort();
+    res
+}
+
 fn build_expression(nrs: &[u64], target: u64)
 {
     let count = nrs.len();
@@ -269,10 +309,9 @@ fn build_expression(nrs: &[u64], target: u64)
         let mut best = String::new();
         let mut best_diff = Rat::zero();
 
-        let idxs = (0..count as Idx).collect::<Vec<_>>();
-        'outer: for (idxs0, idxs1) in partitions(nrs, &idxs)
+        let idxs = unique_indices(nrs);
+        'outer: for (idxs0, idxs1) in partitions(&idxs)
         {
-
             let key0 = expressions(nrs, &idxs0, &mut cache);
             let key1 = expressions(nrs, &idxs1, &mut cache);
             for expr0 in cache[&key0].iter()
@@ -306,9 +345,10 @@ fn build_expression(nrs: &[u64], target: u64)
     }
 }
 
+/// Print a usage message, and exit.
 fn usage() -> !
 {
-    println!("Usage: makeexpr number [number ...] result");
+    println!("Usage: makeexpr number [number ...] target");
     ::std::process::exit(1);
 }
 
@@ -333,7 +373,7 @@ fn main()
     let count = nrs.len();
     if count > Op::max_value() as usize - 4
     {
-        panic!("Too many numbers for {}-bit indices", 8*::std::mem::sizeof::<Idx>());
+        panic!("Too many numbers for {}-bit indices", 8*::std::mem::size_of::<Idx>());
     }
 
     let target;
@@ -343,6 +383,5 @@ fn main()
         _ => usage()
     }
 
-    nrs.sort();
     build_expression(&nrs, target);
 }
