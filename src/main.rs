@@ -59,6 +59,14 @@ impl Expr
         Expr { ops: vec![idx], val: Rat::from_integer(nrs[idx as usize]) }
     }
 
+    /// Create an empty expression.
+    ///
+    /// Create an empty expression that evaluates to zero.
+    fn empty() -> Self
+    {
+        Expr { ops: vec![], val: Rat::zero() }
+    }
+
     fn possible_combinations(&self, expr: &Self) -> ArrayVec<[(char, Rat); 6]>
     {
         let mut res = ArrayVec::<[_; 6]>::new();
@@ -294,20 +302,20 @@ fn unique_indices(nrs: &[u64]) -> Vec<Idx>
     res
 }
 
-fn build_expression(nrs: &[u64], target: u64)
+fn get_nearest_expression(nrs: &[u64], target: u64) -> Expr
 {
     let count = nrs.len();
     if count == 1
     {
-        println!("{} = {}", nrs[0], nrs[0]);
+        Expr::new(nrs, 0)
     }
     else
     {
         let mut cache = HashMap::new();
 
         let rtarget = Rat::from_integer(target);
-        let mut best = String::new();
-        let mut best_diff = Rat::zero();
+        let mut best = Expr::empty();
+        let mut best_diff = Rat::from_integer(::std::u64::MAX);
 
         let idxs = unique_indices(nrs);
         'outer: for (idxs0, idxs1) in partitions(&idxs)
@@ -321,11 +329,11 @@ fn build_expression(nrs: &[u64], target: u64)
                     for (op, val) in expr0.possible_combinations(expr1)
                     {
                         let diff = if val > rtarget { val - rtarget } else { rtarget - val };
-                        if best.is_empty() || diff < best_diff
+                        if diff < best_diff
                         {
-                            best = expr0.combine(expr1, op, val).to_string(nrs);
+                            best = expr0.combine(expr1, op, val);
                             best_diff = diff;
-                            println!("{} = {}", best, val);
+                            println!("{} = {}", best.to_string(nrs), val);
 
                             if diff.is_zero()
                             {
@@ -342,7 +350,10 @@ fn build_expression(nrs: &[u64], target: u64)
                 cache.remove(&key1);
             }
         }
+
+        best
     }
+
 }
 
 /// Print a usage message, and exit.
@@ -383,5 +394,6 @@ fn main()
         _ => usage()
     }
 
-    build_expression(&nrs, target);
+    let expr = get_nearest_expression(&nrs, target);
+    println!("{} = {}", expr.to_string(&nrs), expr.val);
 }
