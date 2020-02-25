@@ -73,37 +73,67 @@ impl Expr
 
         let op0 = *self.ops.last().unwrap();
         let op1 = *expr.ops.last().unwrap();
-        if op1 != ADD && op1 != SUB
-        {
-            if op0 != SUB
+        let ops = match (op0, op1)
             {
-                res.push(('+', self.val + expr.val));
-            }
-            if self.val >= expr.val && !expr.val.is_zero()
-            {
-                res.push(('-', self.val - expr.val));
-            }
-        }
+                (ADD, ADD) => "*/\\",
+                (ADD, SUB) => "*/\\",
+                (ADD, MUL) => "+-\\",
+                (ADD, DIV) => "+-\\",
+                (ADD,   _) => "+-*/\\",
+                (SUB, ADD) => "*/\\",
+                (SUB, SUB) => "*/\\",
+                (SUB, MUL) => "-\\",
+                (SUB, DIV) => "-\\",
+                (SUB,   _) => "-*/\\",
+                (MUL, ADD) => "*/",
+                (MUL, SUB) => "*/",
+                (MUL, MUL) => "+-_",
+                (MUL, DIV) => "+-_",
+                (MUL,   _) => "+-*/_",
+                (DIV, ADD) => "/_",
+                (DIV, SUB) => "/_",
+                (DIV, MUL) => "+-_",
+                (DIV, DIV) => "+-_",
+                (DIV,   _) => "+-/_",
+                _          => "+-*/_\\"
+            };
 
-        if op1 != MUL && op1 != DIV
+        for op in ops.chars()
         {
-            if op0 != DIV
+            match op
             {
-                res.push(('*', self.val * expr.val));
+                '+' => {
+                    res.push((op, self.val + expr.val));
+                },
+                '-' => {
+                    if self.val >= expr.val
+                    {
+                        res.push((op, self.val - expr.val));
+                    }
+                },
+                '*' => {
+                    res.push((op, self.val * expr.val));
+                },
+                '/' => {
+                    if !expr.val.is_zero()
+                    {
+                        res.push((op, self.val / expr.val));
+                    }
+                },
+                '_' => {
+                    if expr.val >= self.val
+                    {
+                        res.push((op, expr.val - self.val));
+                    }
+                },
+                '\\' => {
+                    if !self.val.is_zero()
+                    {
+                        res.push((op, expr.val / self.val));
+                    }
+                },
+                _ => {}
             }
-            if !expr.val.is_zero() && !expr.val.is_one()
-            {
-                res.push(('/', self.val / expr.val));
-            }
-        }
-
-        if op0 != ADD && op0 != SUB && expr.val >= self.val && !self.val.is_zero()
-        {
-            res.push(('_', expr.val - self.val));
-        }
-        if op0 != MUL && op0 != DIV && !self.val.is_zero() && !self.val.is_one()
-        {
-            res.push(('\\', expr.val / self.val));
         }
 
         res
