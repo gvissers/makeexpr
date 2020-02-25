@@ -350,7 +350,7 @@ fn get_nearest_expression_multiple(nrs: &[u64], target: u64) -> Expr
                         let diff = if val < rtarget { rtarget - val } else { val - rtarget };
 
                         best = expr0.combine(expr1, op, val);
-                        best_min = rtarget - diff;
+                        best_min = if diff > rtarget { Rat::zero() } else { rtarget - diff };
                         best_max = rtarget + diff;
 
                         println!("{} = {}", best.to_string(nrs), val);
