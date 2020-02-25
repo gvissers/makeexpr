@@ -338,7 +338,8 @@ fn get_nearest_expression_multiple(nrs: &[u64], target: u64) -> Expr
 
     let rtarget = Rat::from_integer(target);
     let mut best = Expr::empty();
-    let mut best_diff = Rat::from_integer(::std::u64::MAX);
+    let mut best_min = Rat::zero();
+    let mut best_max = Rat::from_integer(::std::u64::MAX);
 
     let idxs = unique_indices(nrs);
     'outer: for (idxs0, idxs1) in partitions(&idxs)
@@ -351,11 +352,14 @@ fn get_nearest_expression_multiple(nrs: &[u64], target: u64) -> Expr
             {
                 for (op, val) in expr0.possible_combinations(expr1)
                 {
-                    let diff = if val > rtarget { val - rtarget } else { rtarget - val };
-                    if diff < best_diff
+                    if val > best_min && val < best_max
                     {
+                        let diff = if val < rtarget { rtarget - val } else { val - rtarget };
+
                         best = expr0.combine(expr1, op, val);
-                        best_diff = diff;
+                        best_min = rtarget - diff;
+                        best_max = rtarget + diff;
+
                         println!("{} = {}", best.to_string(nrs), val);
 
                         if diff.is_zero()
