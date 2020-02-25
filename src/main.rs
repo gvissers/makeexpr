@@ -302,58 +302,84 @@ fn unique_indices(nrs: &[u64]) -> Vec<Idx>
     res
 }
 
-fn get_nearest_expression(nrs: &[u64], target: u64) -> Expr
+fn get_nearest_expression_multiple(nrs: &[u64], target: u64) -> Expr
 {
-    let count = nrs.len();
-    if count == 1
-    {
-        Expr::new(nrs, 0)
-    }
-    else
-    {
-        let mut cache = HashMap::new();
+    let mut cache = HashMap::new();
 
-        let rtarget = Rat::from_integer(target);
-        let mut best = Expr::empty();
-        let mut best_diff = Rat::from_integer(::std::u64::MAX);
+    let rtarget = Rat::from_integer(target);
+    let mut best = Expr::empty();
+    let mut best_diff = Rat::from_integer(::std::u64::MAX);
 
-        let idxs = unique_indices(nrs);
-        'outer: for (idxs0, idxs1) in partitions(&idxs)
+    let idxs = unique_indices(nrs);
+    'outer: for (idxs0, idxs1) in partitions(&idxs)
+    {
+        let key0 = expressions(nrs, &idxs0, &mut cache);
+        let key1 = expressions(nrs, &idxs1, &mut cache);
+        for expr0 in cache[&key0].iter()
         {
-            let key0 = expressions(nrs, &idxs0, &mut cache);
-            let key1 = expressions(nrs, &idxs1, &mut cache);
-            for expr0 in cache[&key0].iter()
+            for expr1 in cache[&key1].iter()
             {
-                for expr1 in cache[&key1].iter()
+                for (op, val) in expr0.possible_combinations(expr1)
                 {
-                    for (op, val) in expr0.possible_combinations(expr1)
+                    let diff = if val > rtarget { val - rtarget } else { rtarget - val };
+                    if diff < best_diff
                     {
-                        let diff = if val > rtarget { val - rtarget } else { rtarget - val };
-                        if diff < best_diff
-                        {
-                            best = expr0.combine(expr1, op, val);
-                            best_diff = diff;
-                            println!("{} = {}", best.to_string(nrs), val);
+                        best = expr0.combine(expr1, op, val);
+                        best_diff = diff;
+                        println!("{} = {}", best.to_string(nrs), val);
 
-                            if diff.is_zero()
-                            {
-                                break 'outer;
-                            }
+                        if diff.is_zero()
+                        {
+                            break 'outer;
                         }
                     }
                 }
             }
-
-            cache.remove(&key0);
-            if idxs1.len() >= idxs0.len()
-            {
-                cache.remove(&key1);
-            }
         }
 
-        best
+        cache.remove(&key0);
+        if idxs1.len() >= idxs0.len()
+        {
+            cache.remove(&key1);
+        }
     }
 
+    best
+}
+
+fn get_nearest_expression_2(nrs: &[u64], target: u64) -> Expr
+{
+    let rtarget = Rat::from_integer(target);
+    let mut best = Expr::empty();
+    let mut best_diff = Rat::from_integer(::std::u64::MAX);
+
+    let expr0 = Expr::new(nrs, 0);
+    let expr1 = Expr::new(nrs, 1);
+    for (op, val) in expr0.possible_combinations(&expr1)
+    {
+        let diff = if val > rtarget { val - rtarget } else { rtarget - val };
+        if diff < best_diff
+        {
+            best = expr0.combine(&expr1, op, val);
+            best_diff = diff;
+            if diff.is_zero()
+            {
+                break;
+            }
+        }
+    }
+
+    best
+}
+
+fn get_nearest_expression(nrs: &[u64], target: u64) -> Expr
+{
+    match nrs.len()
+    {
+        1 => Expr::new(nrs, 0),
+        2 => get_nearest_expression_2(nrs, target),
+        _ => get_nearest_expression_multiple(nrs, target)
+    }
 }
 
 /// Print a usage message, and exit.
