@@ -1,7 +1,7 @@
-use num_traits::{Zero, One};
 use std::collections::HashMap;
 use arrayvec::ArrayVec;
 use fasthash::xx::Hash64;
+use num_traits::{Zero, One};
 
 type Rat = num_rational::Ratio<u64>;
 /// Type for an index.
@@ -141,35 +141,28 @@ impl Expr
 
     fn combine(&self, expr: &Self, op: char, val: Rat) -> Self
     {
-        let mut ops;
-        match op
-        {
-            '+' => {
-                ops = [&self.ops[..], &expr.ops[..]].concat();
-                ops.push(ADD);
-            },
-            '-' => {
-                ops = [&self.ops[..], &expr.ops[..]].concat();
-                ops.push(SUB);
-            },
-            '*' => {
-                ops = [&self.ops[..], &expr.ops[..]].concat();
-                ops.push(MUL);
-            },
-            '/' => {
-                ops = [&self.ops[..], &expr.ops[..]].concat();
-                ops.push(DIV);
-            },
-            '_' => {
-                ops = [&expr.ops[..], &self.ops[..]].concat();
-                ops.push(SUB);
-            },
-            '\\' => {
-                ops = [&expr.ops[..], &self.ops[..]].concat();
-                ops.push(DIV);
-            }
-            _ => { panic!(); }
-        }
+        let ops = match op
+            {
+                '+' => {
+                    [&self.ops[..], &expr.ops[..], &[ADD]].concat()
+                },
+                '-' => {
+                    [&self.ops[..], &expr.ops[..], &[SUB]].concat()
+                },
+                '*' => {
+                    [&self.ops[..], &expr.ops[..], &[MUL]].concat()
+                },
+                '/' => {
+                    [&self.ops[..], &expr.ops[..], &[DIV]].concat()
+                },
+                '_' => {
+                    [&expr.ops[..], &self.ops[..], &[SUB]].concat()
+                },
+                '\\' => {
+                    [&expr.ops[..], &self.ops[..], &[DIV]].concat()
+                }
+                _ => { panic!(); }
+            };
 
         Expr { ops: ops, val: val }
     }
