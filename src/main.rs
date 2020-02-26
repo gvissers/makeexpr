@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use arrayvec::ArrayVec;
 use fasthash::xx::Hash64;
-use num_traits::{Zero, One};
+use num_traits::Zero;
 
 type Rat = num_rational::Ratio<u64>;
 /// Type for an index.
@@ -351,7 +351,14 @@ fn unique_indices(nrs: &[u64]) -> Vec<Idx>
     res
 }
 
-fn get_nearest_expression_multiple(nrs: &[u64], target: u64) -> Expr
+/// Find the expression nearest to target.
+///
+/// Given more than two input numbers in `nrs`, and target number `target`,
+/// find an arithmetic expression using all the numbers in `nrs` that evaluates
+/// to a number as close as possible (or equal to) `target`. If
+/// `print_intermediate` is true, intermediate search  results are printed on
+/// `stdout`.
+fn get_nearest_expression_multiple(nrs: &[u64], target: u64, print_intermediate: bool) -> Expr
 {
     let mut cache = HashMap::new();
 
@@ -379,11 +386,14 @@ fn get_nearest_expression_multiple(nrs: &[u64], target: u64) -> Expr
                         best_min = if diff > rtarget { Rat::zero() } else { rtarget - diff };
                         best_max = rtarget + diff;
 
-                        println!("{} = {}", best.to_string(nrs), val);
-
                         if diff.is_zero()
                         {
                             break 'outer;
+                        }
+
+                        if print_intermediate
+                        {
+                            println!("{} = {}", best.to_string(nrs), val);
                         }
                     }
                 }
@@ -400,7 +410,13 @@ fn get_nearest_expression_multiple(nrs: &[u64], target: u64) -> Expr
     best
 }
 
-fn get_nearest_expression_2(nrs: &[u64], target: u64) -> Expr
+/// Find the expression nearest to target.
+///
+/// Given two input numbers in `nrs`, and target number `target`, find an arithmetic
+/// expression using all the numbers in `nrs` that evaluates to a number as close
+/// as possible (or equal to) `target`. If `print_intermediate` is true,
+/// intermediate search  results are printed on `stdout`.
+fn get_nearest_expression_2(nrs: &[u64], target: u64, print_intermediate: bool) -> Expr
 {
     let rtarget = Rat::from_integer(target);
     let mut best = Expr::empty();
@@ -415,9 +431,15 @@ fn get_nearest_expression_2(nrs: &[u64], target: u64) -> Expr
         {
             best = expr0.combine(&expr1, op, val);
             best_diff = diff;
+
             if diff.is_zero()
             {
                 break;
+            }
+
+            if print_intermediate
+            {
+                println!("{} = {}", best.to_string(nrs), val);
             }
         }
     }
@@ -425,13 +447,19 @@ fn get_nearest_expression_2(nrs: &[u64], target: u64) -> Expr
     best
 }
 
-fn get_nearest_expression(nrs: &[u64], target: u64) -> Expr
+/// Find the expression nearest to target.
+///
+/// Given input numbers `nrs`, and target number `target`, find an arithmetic
+/// expression using all the numbers in `nrs` that evaluates to a number as close
+/// as possible (or equal to) `target`. If `print_intermediate` is true,
+/// intermediate search  results are printed on `stdout`.
+fn get_nearest_expression(nrs: &[u64], target: u64, print_intermediate: bool) -> Expr
 {
     match nrs.len()
     {
         1 => Expr::new(nrs, 0),
-        2 => get_nearest_expression_2(nrs, target),
-        _ => get_nearest_expression_multiple(nrs, target)
+        2 => get_nearest_expression_2(nrs, target, print_intermediate),
+        _ => get_nearest_expression_multiple(nrs, target, print_intermediate)
     }
 }
 
@@ -444,6 +472,7 @@ fn usage() -> !
 
 fn main()
 {
+    let print_intermediate = true;
     let args: Vec<String> = ::std::env::args().collect();
     if args.len() < 3
     {
@@ -473,6 +502,6 @@ fn main()
         _ => usage()
     }
 
-    let expr = get_nearest_expression(&nrs, target);
+    let expr = get_nearest_expression(&nrs, target, print_intermediate);
     println!("{} = {}", expr.to_string(&nrs), expr.val);
 }
