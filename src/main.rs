@@ -25,6 +25,32 @@ const SUB: Op = Op::max_value() - 1;
 const MUL: Op = Op::max_value() - 2;
 const DIV: Op = Op::max_value() - 3;
 
+/// Wrapper for hashing rational numbers.
+///
+/// The default hash function for Ratio<T> goes out of its way to ensure that
+/// unnormalized numbers give the same hash as their normalized counterparts.
+/// However, the numbers constructed in this program are all normalized,
+/// so we can get away with a much simpler hashing function. To immplement that,
+/// the number is wrapped in a wrapper type, and a simple hash implementation is
+/// provided for the wrapper.
+struct NormalizedRat(Rat);
+
+impl PartialEq for NormalizedRat
+{
+    fn eq(&self, other: &Self) -> bool
+    {
+        self.0 == other.0
+    }
+}
+impl Eq for NormalizedRat {}
+impl ::std::hash::Hash for NormalizedRat
+{
+    fn hash<H: ::std::hash::Hasher>(&self, state: &mut H)
+    {
+        state.write_u64(*self.0.numer());
+        state.write_u64(*self.0.denom());
+    }
+}
 
 /// Structure describing an expression
 ///
@@ -283,7 +309,7 @@ fn expressions<'a>(nrs: &[u64], idxs: &[Idx],
                     {
                         for (op, val) in expr0.possible_combinations(expr1)
                         {
-                            if seen.insert(val)
+                            if seen.insert(NormalizedRat(val))
                             {
                                 map.push(expr0.combine(expr1, op, val));
                             }
